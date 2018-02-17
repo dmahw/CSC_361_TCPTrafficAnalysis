@@ -117,15 +117,18 @@ class Connections:
             print("Source Port: " + str(link.srcPort))
             print("Destination Port: " + str(link.dstPort))
             print("Status: " + str(link.status))
-            print("Start Time: " + str(link.startTime))
-            print("End Time: " + str(link.endTime))
-            print("Duration: " + str(link.duration))
-            print("Number of packets send from Source to Destination: " + str(link.srcDstPacketCount))
-            print("Number of packets send from Destination to Source: " + str(link.dstSrcPacketCount))
-            print("Total number of packets: " + str(link.packetCount))
-            print("Number of data bytes send from Source to Destination: " + str(link.srcDstByteCount))
-            print("Number of data bytes send from Destination to Source: " + str(link.dstSrcByteCount))
-            print("Total number of data bytes: " + str(link.byteCount))
+            if link.status[0] >= 1:
+                if link.status[1] >= 1:
+                    print("Start Time: " + str(link.startTime))
+                    print("End Time: " + str(link.endTime))
+                    print("Duration: " + str(link.duration))
+                    print("Number of packets send from Source to Destination: " + str(link.srcDstPacketCount))
+                    print("Number of packets send from Destination to Source: " + str(link.dstSrcPacketCount))
+                    print("Total number of packets: " + str(link.packetCount))
+                    print("Number of data bytes send from Source to Destination: " + str(link.srcDstByteCount))
+                    print("Number of data bytes send from Destination to Source: " + str(link.dstSrcByteCount))
+                    print("Total number of data bytes: " + str(link.byteCount))
+                    print("END")
             count = count + 1
             if count <= (self.size): print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
@@ -178,6 +181,45 @@ def updateRTTConnection(connection, packet):
     
 
     return 1
+
+def printFinal(stats, connections):
+    print("A) Total number of connections: " + str(connections.size))
+    print("___________________________________________________________________________________")
+    print("")
+    print("B) Connection's details:")
+    print("")
+    connections.printConnections()
+    print("___________________________________________________________________________________")
+    print("")
+    print("C) General:")
+    print("")
+    print("Total number of complete TCP connections: " + str(stats.closeCount))
+    print("Number of reset TCP connections: " + str(stats.rstCount))
+    print("Number of TCP connections that were still open when the trace capture ended: " + str(stats.openCount))
+    print("___________________________________________________________________________________")
+    print("")
+    print("D) Complete TCP connections:")
+    print("")
+    print("Minimum time durations: " + str(stats.minDuration))
+    print("Mean time durations: " + str(stats.meanDuration))
+    print("Maximum time duration: " + str(stats.maxDuration))
+    print("")
+    print("Minimum RTT values including both send/received: " + str(stats.minRTT))
+    print("Mean RTT values including both send/received: " + str(stats.meanRTT))
+    print("Maximum RTT values including both send/received: " + str(stats.maxRTT))
+    print("")
+    print("Minimum number of packets including both send/received: " + str(stats.minPacket))
+    print("Mean number of packets including both send/received: " + str(stats.meanPacket))
+    print("Maximum number of packets including both send/received: " + str(stats.maxPacket))
+    print("")
+    print("Minimum receive window sizes including both send/received: " + str(stats.minWindow))
+    print("Mean receive window sizes including both send/received: " + str(stats.meanWindow))
+    print("Maximum receive window sizes including both send/receive: " + str(stats.maxWindow))
+    print("___________________________________________________________________________________")
+
+
+
+    
 
 def checkForNewConnection(stats, connections, packet):
     if "SYN" in packet.flags:
@@ -382,8 +424,8 @@ def main():
         packet.time = timeStamp
         packet = binToFlags(packet)
 
-        printPacket(packet)
-        print("++++++++++++++++++++++++++++++++++++++++++++++++")
+        # printPacket(packet)
+        # print("++++++++++++++++++++++++++++++++++++++++++++++++")
         if checkForNewConnection(stats, connections, packet) == 0:
             if checkForRST(stats, connections, packet) == 0:
                 if checkForFIN(stats, connections, packet) == 0:
@@ -393,8 +435,9 @@ def main():
         del packet
     
     finalStatCheck(stats, connections)
-    connections.printConnections()
-    stats.printStats()
+    # connections.printConnections()
+    # stats.printStats()
+    printFinal(stats, connections)
 
 main()
 
