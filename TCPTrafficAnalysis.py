@@ -13,17 +13,17 @@ class Statistics:
     meanDuration = 0
     maxDuration = 0
     RTT = 0
-    minRTT = 0
-    meanRTT = 0
-    maxRTT = 0
+    minRTT = -1
+    meanRTT = -1
+    maxRTT = -1
     pktCount = 0
     minPacket = 0
     meanPacket = 0
     maxPacket = 0
     window = 0
-    minWindow = 0
-    meanWindow = 0
-    maxWindow = 0
+    minWindow = -1
+    meanWindow = -1
+    maxWindow = -1
 
     def printStats(self):
         print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
@@ -84,20 +84,21 @@ class Connection:
         self.srcDstByteCount = 0
         self.dstSrcByteCount = 0
         self.byteCount = 0
-        self.initialClientSeq = packet.seq
+        self.initialClientSeq = packet.seq + 1
         self.initialServerSeq = 0
         self.pastClientSeq = packet.seq + 1
         self.pastServerSeq = 0
+        self.pastPacketTime = packet.time
 
         self.duration = 0
-        self.RTT = 0
-        self.minRTT = 0
-        self.meanRTT = 0
-        self.maxRTT = 0
+        self.RTT = 0 
+        self.minRTT = -1
+        self.meanRTT = -1
+        self.maxRTT = -1
         self.window = 0
-        self.minWindow = 0
-        self.meanWindow = 0
-        self.maxWindow = 0
+        self.minWindow = -1
+        self.meanWindow = -1
+        self.maxWindow = -1
 
 class Connections:
     def __init__(self):
@@ -148,10 +149,10 @@ def printPacket(packet):
     print("Destination Port: " + str(packet.dstPort))
     print("Time: " + str(packet.time))
 
-def mac_addr(address):
+def mac_addr(address):      #Refer to Reference
     return ":".join("%02x" % compat_ord(b) for b in address)
 
-def inet_to_str(inet):
+def inet_to_str(inet):      #Refer to Reference
     return socket.inet_ntop(socket.AF_INET, inet)
 
 def binToFlags(packet):
@@ -166,20 +167,53 @@ def binToFlags(packet):
 
 def updateWindowSizeConnection(connection, packet):
     connection.window = connection.window + packet.windowSize
-    if connection.minWindow == 0:
+    if connection.minWindow == -1:
         connection.minWindow = packet.windowSize
-    if connection.maxWindow == 0:
+    if connection.maxWindow == -1:
         connection.maxWindow = packet.windowSize
     if packet.windowSize <= connection.minWindow:
         connection.minWindow = packet.windowSize
     if packet.windowSize >= connection.maxWindow:
         connection.maxWindow = packet.windowSize
-
     return 1
 
 def updateRTTConnection(connection, packet):
-    
+    if connection.pastClientSeq == packet.ack or connection.pastServerSeq == packet.ack:
+        connection.RTT = connection.RTT + packet.time - connection.pastPacketTime
+        if connection.minRTT == -1:
+            connection.minRTT = packet.time - connection.pastPacketTime
+        if connection.maxRTT == -1:
+            connection.maxRTT = packet.time - connection.pastPacketTime
+        if connection.minRTT <= packet.time - connection.pastPacketTime:
+            connection.minRTT = packet.time - connection.pastPacketTime
+        if connection.maxRTT >= packet.time - connection.pastPacketTime:
+            connection.maxRTT = packet.time - connection.pastPacketTime
+    return 1
 
+def updateDstSrcCount(connection, packet):
+    connection.packetCount = connection.packetCount + 1
+    connection.srcDstPacketCount = connection.srcDstPacketCount + 1
+    if (packet.ack - connection.pastServerSeq >= 0):
+        connection.dstSrcByteCount = connection.dstSrcByteCount + packet.ack - connection.pastServerSeq
+        connection.pastClientSeq = packet.seq
+        connection.byteCount = connection.byteCount + packet.ack - connection.pastServerSeq
+    connection.dstSrcByteCount = packet.ack - connection.initialServerSeq
+    connection.byteCount = connection.srcDstByteCount + connection.dstSrcByteCount
+    return 1
+
+def updateSrcDstCount(connection, packet):
+    connection.packetCount = connection.packetCount + 1
+    connection.dstSrcPacketCount = connection.dstSrcPacketCount + 1
+    if (packet.ack - connection.pastClientSeq >= 0):
+        if connection.initialServerSeq == 0:
+            connection.initialServerSeq = packet.seq + 2
+            connection.pastServerSeq = packet.seq + 1
+        else:
+            connection.srcDstByteCount = connection.srcDstByteCount + packet.ack - connection.pastClientSeq
+            connection.pastServerSeq = packet.seq
+            connection.byteCount = connection.byteCount + packet.ack - connection.pastClientSeq
+    connection.srcDstByteCount = packet.ack - connection.initialClientSeq
+    connection.byteCount = connection.srcDstByteCount + connection.dstSrcByteCount
     return 1
 
 def printFinal(stats, connections):
@@ -217,16 +251,15 @@ def printFinal(stats, connections):
     print("Maximum receive window sizes including both send/receive: " + str(stats.maxWindow))
     print("___________________________________________________________________________________")
 
-
-
-    
-
 def checkForNewConnection(stats, connections, packet):
     if "SYN" in packet.flags:
+        print(packet.flags)
         for connection in connections.links:
             if (connection.srcAdd == packet.srcIP) and (connection.dstAdd == packet.dstIP) and (connection.srcPort == packet.srcPort) and (connection.dstPort == packet.dstPort):
+                connection.status[0] = connection.status[0] + 1
                 return 0
             if (connection.dstAdd == packet.srcIP) and (connection.srcAdd == packet.dstIP) and (connection.dstPort == packet.srcPort) and (connection.srcPort == packet.dstPort):
+                connection.status[0] = connection.status[0] + 1
                 return 0
         connection = Connection(packet)
         connection.srcDstPacketCount = connection.srcDstPacketCount + 1
@@ -246,33 +279,21 @@ def checkForExistingConnection(stats, connections, packet):
     isConnection = 0
     for connection in connections.links:
         if (connection.srcAdd == packet.srcIP) and (connection.dstAdd == packet.dstIP) and (connection.srcPort == packet.srcPort) and (connection.dstPort == packet.dstPort):
-            connection.packetCount = connection.packetCount + 1
-            connection.srcDstPacketCount = connection.srcDstPacketCount + 1
             connection.endTime = packet.time
 
             updateWindowSizeConnection(connection, packet)
             updateRTTConnection(connection, packet)
+            updateDstSrcCount(connection, packet)
 
-            connection.dstSrcByteCount = connection.dstSrcByteCount + packet.ack - connection.pastServerSeq
-            connection.pastClientSeq = packet.seq
-            connection.byteCount = connection.byteCount + packet.ack - connection.pastServerSeq
-            
             return 1
+            
         if (connection.dstAdd == packet.srcIP) and (connection.srcAdd == packet.dstIP) and (connection.dstPort == packet.srcPort) and (connection.srcPort == packet.dstPort):
-            connection.packetCount = connection.packetCount + 1
-            connection.dstSrcPacketCount = connection.dstSrcPacketCount + 1
             connection.endTime = packet.time
 
             updateWindowSizeConnection(connection, packet)
             updateRTTConnection(connection, packet)
+            updateSrcDstCount(connection, packet)
 
-            if connection.initialServerSeq == 0:
-                connection.initialServerSeq = packet.seq
-                connection.pastServerSeq = packet.seq + 1
-            else:
-                connection.srcDstByteCount = connection.srcDstByteCount + packet.ack - connection.pastClientSeq
-                connection.pastServerSeq = packet.seq
-                connection.byteCount = connection.byteCount + packet.ack - connection.pastClientSeq
             return 1
     return 0
 
@@ -280,32 +301,22 @@ def checkForRST(stats, connections, packet):
     if "RST" in packet.flags:
         for connection in connections.links:
             if (connection.srcAdd == packet.srcIP) and (connection.dstAdd == packet.dstIP) and (connection.srcPort == packet.srcPort) and (connection.dstPort == packet.dstPort):
-                connection.packetCount = connection.packetCount + 1
-                connection.srcDstPacketCount = connection.srcDstPacketCount + 1
                 connection.status[2] = connection.status[2] + 1
+                connection.endTime = packet.time
 
                 updateWindowSizeConnection(connection, packet)
                 updateRTTConnection(connection, packet)
+                updateDstSrcCount(connection, packet)
 
-                connection.dstSrcByteCount = connection.dstSrcByteCount + packet.ack - connection.pastServerSeq
-                connection.pastClientSeq = packet.seq
-                connection.byteCount = connection.byteCount + packet.ack - connection.pastServerSeq
                 return 1
             if (connection.dstAdd == packet.srcIP) and (connection.srcAdd == packet.dstIP) and (connection.dstPort == packet.srcPort) and (connection.srcPort == packet.dstPort):
-                connection.packetCount = connection.packetCount + 1
-                connection.dstSrcPacketCount = connection.dstSrcPacketCount + 1
                 connection.status[2] = connection.status[2] + 1
+                connection.endTime = packet.time
 
                 updateWindowSizeConnection(connection, packet)
                 updateRTTConnection(connection, packet)
+                updateSrcDstCount(connection, packet)
 
-                if connection.initialServerSeq == 0:
-                    connection.initialServerSeq = packet.seq
-                    connection.pastServerSeq = packet.seq + 1
-                else:
-                    connection.srcDstByteCount = connection.srcDstByteCount + packet.ack - connection.pastClientSeq
-                    connection.pastServerSeq = packet.seq
-                    connection.byteCount = connection.byteCount + packet.ack - connection.pastClientSeq
                 return 1
     return 0   
 
@@ -313,34 +324,22 @@ def checkForFIN(stats, connections, packet):
     if "FIN" in packet.flags:
         for connection in connections.links:
             if (connection.srcAdd == packet.srcIP) and (connection.dstAdd == packet.dstIP) and (connection.srcPort == packet.srcPort) and (connection.dstPort == packet.dstPort):
-                connection.packetCount = connection.packetCount + 1
-                connection.srcDstPacketCount = connection.srcDstPacketCount + 1
                 connection.status[1] = connection.status[1] + 1
                 connection.endTime = packet.time
 
                 updateWindowSizeConnection(connection, packet)
                 updateRTTConnection(connection, packet)
+                updateDstSrcCount(connection, packet)
 
-                connection.dstSrcByteCount = connection.dstSrcByteCount + packet.ack - connection.pastServerSeq
-                connection.pastClientSeq = packet.seq
-                connection.byteCount = connection.byteCount + packet.ack - connection.pastServerSeq
                 return 1
             if (connection.dstAdd == packet.srcIP) and (connection.srcAdd == packet.dstIP) and (connection.dstPort == packet.srcPort) and (connection.srcPort == packet.dstPort):
-                connection.packetCount = connection.packetCount + 1
-                connection.dstSrcPacketCount = connection.dstSrcPacketCount + 1
                 connection.status[1] = connection.status[1] + 1
                 connection.endTime = packet.time
 
                 updateWindowSizeConnection(connection, packet)
                 updateRTTConnection(connection, packet)
-
-                if connection.initialServerSeq == 0:
-                    connection.initialServerSeq = packet.seq
-                    connection.pastServerSeq = packet.seq + 1
-                else:
-                    connection.srcDstByteCount = connection.srcDstByteCount + packet.ack - connection.pastClientSeq
-                    connection.pastServerSeq = packet.seq
-                    connection.byteCount = connection.byteCount + packet.ack - connection.pastClientSeq
+                updateSrcDstCount(connection, packet)
+                
                 return 1
     return 0
 
@@ -374,21 +373,32 @@ def finalStatCheck(stats, connections):
                     stats.maxPacket = connection.packetCount
 
                 stats.window = stats.window + connection.window
-                if stats.minWindow == 0:
+                if stats.minWindow == -1:
                     stats.minWindow = connection.minWindow
-                if stats.maxWindow == 0:
+                if stats.maxWindow == -1:
                     stats.maxWindow = connection.maxWindow
                 if connection.minWindow <= stats.minWindow:
                     stats.minWindow = connection.minWindow
                 if connection.maxWindow >= stats.maxWindow:
                     stats.maxWindow = connection.maxWindow 
+
+                stats.RTT = stats.RTT + connection.RTT
+                if stats.minRTT == -1:
+                    stats.minRTT = connection.minRTT
+                if stats.maxRTT == -1:
+                    stats.maxRTT = connection.maxRTT
+                if connection.minRTT <= stats.minRTT:
+                    stats.minRTT = connection.minRTT
+                if connection.maxRTT >= stats.maxRTT:
+                    stats.maxRTT = connection.maxRTT 
             
             if connection.status[2] >= 1:
                 stats.rstCount = stats.rstCount + 1
 
     stats.meanDuration = stats.duration / stats.closeCount
     stats.meanPacket = stats.pktCount / stats.closeCount
-    stats.meanWindow = stats.window /stats.pktCount
+    stats.meanWindow = stats.window / stats.pktCount
+    stats.meanRTT = stats.RTT / stats.pktCount
     return 1
 
 def main():
