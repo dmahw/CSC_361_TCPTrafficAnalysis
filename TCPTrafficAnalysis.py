@@ -211,10 +211,10 @@ def analyzePacket(stats, connections, packet):
             connection.window.append(packet.windowSize)
             byteTransfered = updateDstSrcCount(connection, packet)
 
-            if "ACK" in packet.flags and connection.calRTT == 1:
-                clientFinalRTT(stats, connection, packet)
-                connection.calRTT = 0
-            
+            if "SYN" in packet.flags or "FIN" in packet.flags:
+                connection.calRTT = 1
+                clientInitialRTT(stats, connection, packet)
+                
             return 1
 
         if (connection.dstAdd == packet.srcIP) and (connection.srcAdd == packet.dstIP) and (connection.dstPort == packet.srcPort) and (connection.srcPort == packet.dstPort):
@@ -229,9 +229,9 @@ def analyzePacket(stats, connections, packet):
             connection.window.append(packet.windowSize)
             byteTransfered = updateSrcDstCount(connection, packet)
 
-            if byteTransfered > 0 or "SYN" in packet.flags or "FIN" in packet.flags:
-                connection.calRTT = 1
-                clientInitialRTT(stats, connection, packet)
+            if ((byteTransfered > 0 and "ACK" in packet.flags) or "SYN" in packet.flags) and connection.calRTT == 1:
+                connection.calRTT = 0
+                clientFinalRTT(stats, connection, packet)
 
             return 1
 
@@ -243,6 +243,10 @@ def analyzePacket(stats, connections, packet):
     stats.connCount = stats.connCount + 1
     connection.window.append(packet.windowSize)
     connections.add(connection)
+
+    if "SYN" in packet.flags:
+        connection.calRTT = 1
+        clientInitialRTT(stats, connection, packet)
     return 0
 
 def finalStatCheck(stats, connections):
