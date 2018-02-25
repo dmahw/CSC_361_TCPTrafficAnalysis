@@ -1,8 +1,6 @@
 import sys, dpkt, socket
 from dpkt.compat import compat_ord
 
-VERBOSE = 1
-
 class Statistics:
     connCount = 0
     rstCount = 0
@@ -64,6 +62,7 @@ class Connection:
         self.pastClientPacketTime = packet.time
         self.pastServerPacketTime = 0
         self.RTTCount = 0
+        self.calRTT = 0
 
         self.duration = 0
         self.RTT = []
@@ -146,23 +145,12 @@ def clientFinalRTT(stats, connection, packet):
         connection.RTT.append(RTT)
     return 0
 
-def serverInitialRTT(stats, connection, packet):
-    connection.pastServerSeq = packet.seq
-    connection.pastServerPacketTime = packet.time
-    return 0
-
-def serverFinalRTT(stats, connection, packet):
-    if connection.pastServerSeq <= packet.ack:
-        RTT = packet.time - connection.pastServerPacketTime
-        connection.RTT.append(RTT)
-    return 0
-
 def updateDstSrcCount(connection, packet):
     connection.packetCount = connection.packetCount + 1
     connection.srcDstPacketCount = connection.srcDstPacketCount + 1
     connection.dstSrcByteCount = packet.ack - connection.initialServerSeq - 1
     connection.byteCount = connection.srcDstByteCount + connection.dstSrcByteCount
-    return 1
+    return packet.ack - connection.initialServerSeq - 1
 
 def updateSrcDstCount(connection, packet):
     connection.packetCount = connection.packetCount + 1
@@ -171,7 +159,7 @@ def updateSrcDstCount(connection, packet):
         connection.initialServerSeq = packet.seq + 1
     connection.srcDstByteCount = packet.ack - connection.initialClientSeq
     connection.byteCount = connection.srcDstByteCount + connection.dstSrcByteCount
-    return 1
+    return packet.ack - connection.initialClientSeq
 
 def printFinal(stats, connections):
     print("A) Total number of connections: " + str(connections.size))
@@ -220,11 +208,12 @@ def analyzePacket(stats, connections, packet):
             if "RST" in packet.flags:
                 connection.status[2] = connection.status[2] + 1
             
-            clientInitialRTT(stats, connection, packet)
-            serverFinalRTT(stats, connection, packet)
-
             connection.window.append(packet.windowSize)
-            updateDstSrcCount(connection, packet)
+            byteTransfered = updateDstSrcCount(connection, packet)
+
+            if "ACK" in packet.flags and connection.calRTT == 1:
+                clientFinalRTT(stats, connection, packet)
+                connection.calRTT = 0
             
             return 1
 
@@ -237,11 +226,13 @@ def analyzePacket(stats, connections, packet):
             if "RST" in packet.flags:
                 connection.status[2] = connection.status[2] + 1
 
-            serverInitialRTT(stats, connection, packet)
-            clientFinalRTT(stats, connection, packet)
-
             connection.window.append(packet.windowSize)
-            updateSrcDstCount(connection, packet)
+            byteTransfered = updateSrcDstCount(connection, packet)
+
+            if byteTransfered > 0 or "SYN" in packet.flags or "FIN" in packet.flags:
+                connection.calRTT = 1
+                clientInitialRTT(stats, connection, packet)
+
             return 1
 
     connection = Connection(packet)
