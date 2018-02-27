@@ -1,7 +1,7 @@
 import sys, dpkt, socket
 from dpkt.compat import compat_ord
 
-class Statistics:
+class Statistics:               #Statistic Class: Used just to store global stats of the following info
     connCount = 0
     rstCount = 0
     openCount = 0
@@ -24,7 +24,7 @@ class Statistics:
     meanWindow = -1
     maxWindow = -1
 
-class Packet(object):
+class Packet(object):       #Packet Class: used to store packet info. A packet class is created for each packet, and destroyed after being analyzed
     srcMac = ""
     dstMac = ""
     srcIP = ""
@@ -40,7 +40,7 @@ class Packet(object):
     dstPort = -1
     time = -1
 
-class Connection:
+class Connection:                           #
     def __init__(self, packet):
         self.srcAdd = packet.srcIP
         self.dstAdd = packet.dstIP
@@ -307,12 +307,12 @@ def main():
     connections = Connections()
     count = 0
 
-    for timeStamp, buf in tracePcap:
+    for timeStamp, buf in tracePcap:                    #Refer to reference. Parts of the referenced code has been deleted or modified.
         eth = dpkt.ethernet.Ethernet(buf)
-        ip = eth.data
-        tcp = ip.data
+        ip = eth.data                                   #IP Header
+        tcp = ip.data                                   #TCP Header
 
-        packet = Packet()
+        packet = Packet()                               #Storing various values into a packet class
         packet.srcMac = mac_addr(eth.src)
         packet.dstMac = mac_addr(eth.dst)
         
