@@ -25,7 +25,7 @@ class Statistics:               #Statistic Class: Used just to store global stat
     maxWindow = -1
 
 class Packet(object):       #Packet Class: used to store packet info. A packet class is created for each packet, and destroyed after being analyzed
-    srcMac = ""
+    srcMac = ""             
     dstMac = ""
     srcIP = ""
     dstIP = ""
@@ -40,13 +40,13 @@ class Packet(object):       #Packet Class: used to store packet info. A packet c
     dstPort = -1
     time = -1
 
-class Connection:                           #
+class Connection:                           #Connection Info. Used to store
     def __init__(self, packet):
         self.srcAdd = packet.srcIP
         self.dstAdd = packet.dstIP
         self.srcPort = packet.srcPort
-        self.dstPort = packet.dstPort
-        self.status = [0, 0, 0]
+        self.dstPort = packet.dstPort  
+        self.status = [0, 0, 0]             #SYN Count, FIN Count, RST Count
         self.startTime = packet.time
         self.endTime = packet.time
         self.srcDstPacketCount = 0
@@ -88,9 +88,9 @@ class Connections:
             print("Status: " + "S" + str(link.status[0]) + "F" + str(link.status[1]) + "R" + str(link.status[2]))
             if link.status[0] >= 1:
                 if link.status[1] >= 1:
-                    print("Start Time: " + str(link.startTime))
-                    print("End Time: " + str(link.endTime))
-                    print("Duration: " + str(link.duration))
+                    print("Start Time: " + str(link.startTime) + "ms")
+                    print("End Time: " + str(link.endTime) + "ms")
+                    print("Duration: " + str(link.duration) + "ms")
                     print("Number of packets send from Source to Destination: " + str(link.srcDstPacketCount))
                     print("Number of packets send from Destination to Source: " + str(link.dstSrcPacketCount))
                     print("Total number of packets: " + str(link.packetCount))
@@ -117,15 +117,15 @@ def printPacket(packet):
     print("Destination Port: " + str(packet.dstPort))
     print("Time: " + str(packet.time))
 
-def mac_addr(address):      #Refer to Reference
+def mac_addr(address):      #Refer to Reference                     #Used to convert binary to mac addresses
     return ":".join("%02x" % compat_ord(b) for b in address)
 
-def inet_to_str(inet):      #Refer to Reference
+def inet_to_str(inet):      #Refer to Reference                     #Used to convert binary to Ip Addresses
     return socket.inet_ntop(socket.AF_INET, inet)
 
-def binToFlags(packet):
+def binToFlags(packet):                                             #Binary Flag parsing
     packet.flags = []
-    if packet.flagsBin & 0b1: packet.flags.append("FIN")
+    if packet.flagsBin & 0b1: packet.flags.append("FIN")            
     if packet.flagsBin & 0b10: packet.flags.append("SYN")
     if packet.flagsBin & 0b100: packet.flags.append("RST")
     if packet.flagsBin & 0b1000: packet.flags.append("PSH")
@@ -134,28 +134,28 @@ def binToFlags(packet):
     return packet
 
 
-def clientInitialRTT(stats, connection, packet):
-    connection.pastClientSeq = packet.seq
-    connection.pastClientPacketTime = packet.time
+def clientInitialRTT(stats, connection, packet):                    #The initial time for RTT
+    connection.pastClientSeq = packet.seq                           #Initial sequence number sent
+    connection.pastClientPacketTime = packet.time                   #Initial packet time
     return 0
 
-def clientFinalRTT(stats, connection, packet):
-    if connection.pastClientSeq <= packet.ack:
-        RTT = packet.time - connection.pastClientPacketTime
-        connection.RTT.append(RTT)
+def clientFinalRTT(stats, connection, packet):                      #Client final RTT
+    if connection.pastClientSeq <= packet.ack:                      #Ensure that the ack receieved corresponds to an ack
+        RTT = packet.time - connection.pastClientPacketTime         #Calculate RTT time between the matching seq to ack
+        connection.RTT.append(RTT)                                  #Append RTT calculation to connection for mean and other purposes
     return 0
 
-def updateDstSrcCount(connection, packet):
-    connection.packetCount = connection.packetCount + 1
+def updateDstSrcCount(connection, packet):                          #Calculation to update the byte and packet count from the destunation to source
+    connection.packetCount = connection.packetCount + 1 
     connection.srcDstPacketCount = connection.srcDstPacketCount + 1
-    connection.dstSrcByteCount = packet.ack - connection.initialServerSeq - 1
+    connection.dstSrcByteCount = packet.ack - connection.initialServerSeq - 1           
     connection.byteCount = connection.srcDstByteCount + connection.dstSrcByteCount
     return packet.ack - connection.initialServerSeq - 1
 
-def updateSrcDstCount(connection, packet):
+def updateSrcDstCount(connection, packet):                          #Method to update the byte and packet count from the source to destionation
     connection.packetCount = connection.packetCount + 1
     connection.dstSrcPacketCount = connection.dstSrcPacketCount + 1
-    if connection.initialServerSeq == 0:
+    if connection.initialServerSeq == 0:                            #Initial server / client 3 way hand shake scenario handling
         connection.initialServerSeq = packet.seq + 1
     connection.srcDstByteCount = packet.ack - connection.initialClientSeq
     connection.byteCount = connection.srcDstByteCount + connection.dstSrcByteCount
@@ -179,9 +179,9 @@ def printFinal(stats, connections):
     print("")
     print("D) Complete TCP connections:")
     print("")
-    print("Minimum time durations: " + str(stats.minDuration))
-    print("Mean time durations: " + str(stats.meanDuration))
-    print("Maximum time duration: " + str(stats.maxDuration))
+    print("Minimum time durations: " + str(stats.minDuration) + "ms")
+    print("Mean time durations: " + str(stats.meanDuration) + "ms")
+    print("Maximum time duration: " + str(stats.maxDuration) + "ms")
     print("")
     print("Minimum RTT values: " + str(stats.minRTT))
     print("Mean RTT values: " + str(stats.meanRTT))
@@ -197,26 +197,28 @@ def printFinal(stats, connections):
     print("___________________________________________________________________________________")
 
 
-def analyzePacket(stats, connections, packet):
-    for connection in connections.links:
+def analyzePacket(stats, connections, packet):              #Series of function calls that analyzes all the packets
+    for connection in connections.links:                    #Checks whether a connection exists in file for the packet being analyzed
         if (connection.srcAdd == packet.srcIP) and (connection.dstAdd == packet.dstIP) and (connection.srcPort == packet.srcPort) and (connection.dstPort == packet.dstPort):
-            if "SYN" in packet.flags:
-                connection.status[0] = connection.status[0] + 1
+            if "SYN" in packet.flags:                           
+                connection.status[0] = connection.status[0] + 1         #Update SYN Count
             if "FIN" in packet.flags:
-                connection.status[1] = connection.status[1] + 1
-                connection.endTime = packet.time
+                connection.status[1] = connection.status[1] + 1         #Update FIN Count
+                connection.endTime = packet.time                        #Update END TIME
             if "RST" in packet.flags:
-                connection.status[2] = connection.status[2] + 1
+                connection.status[2] = connection.status[2] + 1         #Update RST Count
             
-            connection.window.append(packet.windowSize)
-            byteTransfered = updateDstSrcCount(connection, packet)
+            connection.window.append(packet.windowSize)                 #Store Window Size
+            byteTransfered = updateDstSrcCount(connection, packet)      #Calculate if any bytes were sent /received
 
-            if "SYN" in packet.flags or "FIN" in packet.flags:
-                connection.calRTT = 1
+            if "SYN" in packet.flags or "FIN" in packet.flags:          #Calculate the RTT if it is SYN or FIN
+                connection.calRTT = 1                                   
                 clientInitialRTT(stats, connection, packet)
                 
             return 1
 
+                                        #Serires of function calls that analyzes all the packets
+                                        #Similar as to above, but for server -> destionation packets
         if (connection.dstAdd == packet.srcIP) and (connection.srcAdd == packet.dstIP) and (connection.dstPort == packet.srcPort) and (connection.srcPort == packet.dstPort):
             if "SYN" in packet.flags:
                 connection.status[0] = connection.status[0] + 1
