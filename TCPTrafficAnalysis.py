@@ -183,9 +183,9 @@ def printFinal(stats, connections):
     print("Mean time durations: " + str(stats.meanDuration) + "ms")
     print("Maximum time duration: " + str(stats.maxDuration) + "ms")
     print("")
-    print("Minimum RTT values: " + str(stats.minRTT))
-    print("Mean RTT values: " + str(stats.meanRTT))
-    print("Maximum RTT values: " + str(stats.maxRTT))
+    print("Minimum RTT values: " + str(stats.minRTT) + "ms")
+    print("Mean RTT values: " + str(stats.meanRTT) + "ms")
+    print("Maximum RTT values: " + str(stats.maxRTT) + "ms")
     print("")
     print("Minimum number of packets including both send/received: " + str(stats.minPacket))
     print("Mean number of packets including both send/received: " + str(stats.meanPacket))
@@ -209,7 +209,7 @@ def analyzePacket(stats, connections, packet):              #Series of function 
                 connection.status[2] = connection.status[2] + 1         #Update RST Count
             
             connection.window.append(packet.windowSize)                 #Store Window Size
-            byteTransfered = updateDstSrcCount(connection, packet)      #Calculate if any bytes were sent /received
+            byteTransfered = updateDstSrcCount(connection, packet)      #Calculate if any bytes were sent /received, and store
 
             if "SYN" in packet.flags or "FIN" in packet.flags:          #Calculate the RTT if it is SYN or FIN
                 connection.calRTT = 1                                   
@@ -229,36 +229,37 @@ def analyzePacket(stats, connections, packet):              #Series of function 
                 connection.status[2] = connection.status[2] + 1
 
             connection.window.append(packet.windowSize)
-            byteTransfered = updateSrcDstCount(connection, packet)
+            byteTransfered = updateSrcDstCount(connection, packet)  
 
+                                            #Only calculate RTT is, it is SYN, has data transfered
             if ((byteTransfered > 0 and "ACK" in packet.flags) or "SYN" in packet.flags) and connection.calRTT == 1:
                 connection.calRTT = 0
                 clientFinalRTT(stats, connection, packet)
 
             return 1
 
-    connection = Connection(packet)
-    connection.srcDstPacketCount = connection.srcDstPacketCount + 1
-    connection.packetCount = connection.packetCount + 1
-    connection.status[0] = connection.status[0] + 1
-    stats.openCount = stats.openCount + 1
-    stats.connCount = stats.connCount + 1
-    connection.window.append(packet.windowSize)
+    connection = Connection(packet)                                                 #If there isn't any existing connection, create a connection
+    connection.srcDstPacketCount = connection.srcDstPacketCount + 1                 #Update packet count
+    connection.packetCount = connection.packetCount + 1                             #
+    connection.status[0] = connection.status[0] + 1                                 #Add syn count
+    stats.openCount = stats.openCount + 1                                           #Add open count
+    stats.connCount = stats.connCount + 1                                           #Add connection cvount
+    connection.window.append(packet.windowSize)                                     #Store c
     connections.add(connection)
 
-    if "SYN" in packet.flags:
-        connection.calRTT = 1
+    if "SYN" in packet.flags:                                                       #If SYN, prepare values for RTT
+        connection.calRTT = 1                                                       
         clientInitialRTT(stats, connection, packet)
     return 0
 
-def finalStatCheck(stats, connections):
-    for connection in connections.links:
-        if connection.status[0] >= 1:
-            if connection.status[1] >= 1:
-                stats.openCount = stats.openCount - 1
+def finalStatCheck(stats, connections):                                             #After analyzing all the packets
+    for connection in connections.links:                                            #For all connections
+        if connection.status[0] >= 1:                                               #If SYN
+            if connection.status[1] >= 1:                                           #If FIN
+                stats.openCount = stats.openCount - 1                               #Complete connection
                 stats.closeCount = stats.closeCount + 1
 
-                connection.duration = connection.endTime - connection.startTime
+                connection.duration = connection.endTime - connection.startTime     #min mean max duration for all compelete connections
                 stats.duration = stats.duration + connection.duration
                 if stats.minDuration == 0:
                     stats.minDuration = connection.duration
@@ -269,7 +270,7 @@ def finalStatCheck(stats, connections):
                 if connection.duration >= stats.maxDuration:
                     stats.maxDuration = connection.duration
                 
-                stats.pktCount = stats.pktCount + connection.packetCount
+                stats.pktCount = stats.pktCount + connection.packetCount        #min mean max packet count for all complete connections
                 if stats.minPacket == 0:
                     stats.minPacket = connection.packetCount
                 if stats.maxPacket == 0:
@@ -279,33 +280,33 @@ def finalStatCheck(stats, connections):
                 if connection.packetCount >= stats.maxPacket:
                     stats.maxPacket = connection.packetCount
 
-                stats.window.extend(connection.window)
+                stats.window.extend(connection.window)                          #update connection window for min, mean max calculations
 
-                stats.RTT.extend(connection.RTT)
+                stats.RTT.extend(connection.RTT)                                #add rtt for min mean max valculations
 
             if connection.status[2] >= 1:
                 stats.rstCount = stats.rstCount + 1
 
-    stats.meanDuration = stats.duration / stats.closeCount
-    stats.meanPacket = stats.pktCount / stats.closeCount
+    stats.meanDuration = stats.duration / stats.closeCount                      #mean duration calculation
+    stats.meanPacket = stats.pktCount / stats.closeCount                        #mean packet count duration
 
-    stats.minWindow = min(stats.window)
+    stats.minWindow = min(stats.window)                                         #min mean max window size calculation
     stats.maxWindow = max(stats.window)
     stats.meanWindow = sum(stats.window)/stats.pktCount
 
-    stats.minRTT = min(stats.RTT)
+    stats.minRTT = min(stats.RTT)                                               #min mean max RTT calculation
     stats.maxRTT = max(stats.RTT)
     stats.meanRTT = sum(stats.RTT) / len(stats.RTT)
     
     return 1
 
 def main():
-    traceFileName = sys.argv[1]
+    traceFileName = sys.argv[1]                         #name of file to read from
 
-    traceFile = open(traceFileName, "rb")
-    tracePcap = dpkt.pcap.Reader(traceFile)
+    traceFile = open(traceFileName, "rb")               #open the file to read in binary
+    tracePcap = dpkt.pcap.Reader(traceFile)             #use a reader to parse
 
-    stats = Statistics()
+    stats = Statistics()                                
     connections = Connections()
     count = 0
 
@@ -332,7 +333,7 @@ def main():
         packet.time = timeStamp
         packet = binToFlags(packet)
 
-        analyzePacket(stats, connections, packet)
+        analyzePacket(stats, connections, packet)       #For each packet, analyze
         del packet
     
     finalStatCheck(stats, connections)

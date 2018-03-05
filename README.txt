@@ -11,3 +11,10 @@ Requirements
 
 4. Package socket must be installed for python 3
 4. And any other dependencies required for setuptools and dpkt
+
+Steps to Run
+*****************************
+1. In the folder with TCPTrafficAnalysis.py
+    a. Have the pcap file or file the analyze in the same folder
+2. Run (without "" or [])
+    "python3 TCPTrafficAnalysis.py [sampleFile]"
